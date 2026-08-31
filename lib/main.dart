@@ -330,27 +330,34 @@ class TentangPage extends StatelessWidget {
       ),
       body: Center(
         child: Padding(
-        padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const CircleAvatar(
-              radius: 50,
-              backgroundImage: AssetImage('assets/pap.jpeg'),   
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Bimo Nugroho',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('XII RPL B'),
-            const Text('SMK Negeri 5 Surakarta'),
-          ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage('assets/pap.jpeg'),  
+              ),
+              const SizedBox(height: 16),
+              // Diubah menjadi namamu sebagai bentuk kontribusi/modifikasi
+              const Text(
+                'Salman Alfarizi Bashen',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('XII RPL B'),
+              const Text('SMK Negeri 5 Surakarta'),
+              const SizedBox(height: 12),
+              // Tambahan teks kecil sebagai penanda kontribusi tugas
+              const Text(
+                'Kontribusi oleh Salman',
+                style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
