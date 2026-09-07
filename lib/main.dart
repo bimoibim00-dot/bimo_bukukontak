@@ -214,41 +214,41 @@ class KontakPage extends StatelessWidget {
   }
 }
 
-class TambahKontakPage extends StatefulWidget {
-  const TambahKontakPage({super.key});
+  class TambahKontakPage extends StatefulWidget {
+    const TambahKontakPage({super.key});
 
   @override
   State<TambahKontakPage> createState() => _TambahKontakPageState();
 }
 
-class _TambahKontakPageState extends State<TambahKontakPage> {
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
-  final TextEditingController kategoriController = TextEditingController();
+  class _TambahKontakPageState extends State<TambahKontakPage> {
+    final _formKey = GlobalKey<FormState>();
 
-  void _saveContact() {
-    if (nameController.text.trim().isEmpty) return;
-
-    Navigator.pop(
-      context,
-      Contact(
-        name: nameController.text,
-        email: emailController.text,
-        phone: phoneController.text,
-        kategori: kategoriController.text.isEmpty ? null : kategoriController.text,
-      ),
-    );
-  }
+  final TextEditingController _namaController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _noHpController = TextEditingController();
+  final TextEditingController _kategoriController = TextEditingController(); // Tugas 4
 
   @override
   void dispose() {
-    nameController.dispose();
-    emailController.dispose();
-    phoneController.dispose();
-    kategoriController.dispose();
+    _namaController.dispose();
+    _emailController.dispose();
+    _noHpController.dispose();
+    _kategoriController.dispose();
     super.dispose();
   }
+
+  void _simpanKontak() {
+  if (_formKey.currentState!.validate()) {
+    final newContact = Contact(
+      name: _namaController.text,
+      email: _emailController.text,
+      phone: _noHpController.text,
+      kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
+    );
+    Navigator.pop(context, newContact);
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -260,50 +260,80 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Nama Lengkap',
-                border: OutlineInputBorder(),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _namaController,
+                decoration: const InputDecoration(
+                  labelText: 'Nama Lengkap',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Nama tidak boleh kosong';
+                  }
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Email tidak boleh kosong';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Email harus mengandung karakter @';
+                  }
+                  return null;
+                },
               ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(
-                labelText: 'No. Handphone',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _noHpController,
+                decoration: const InputDecoration(
+                  labelText: 'No. Handphone',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'No. Handphone tidak boleh kosong';
+                  }
+                  if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
+                    return 'No. Handphone hanya boleh berisi angka';
+                  }
+                  if (value.length < 10) {
+                    return 'No. Handphone minimal 10 digit';
+                  }
+                  return null;
+                },
               ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: kategoriController,
-              decoration: const InputDecoration(
-                labelText: 'Kategori (Keluarga/Teman/Kerja)',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _kategoriController,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori (Keluarga/Teman/Kerja)',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveContact,
-                child: const Text('Simpan'),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _simpanKontak,
+                  child: const Text('Simpan'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
