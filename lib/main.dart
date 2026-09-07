@@ -24,8 +24,9 @@ class Contact {
   final String name;
   final String email;
   final String phone;
+  final String? kategori;
 
-  Contact({required this.name, required this.email, required this.phone});
+  Contact({required this.name, required this.email, required this.phone, this.kategori});
 }
 
 class HomePage extends StatefulWidget {
@@ -197,7 +198,7 @@ class KontakPage extends StatelessWidget {
               ),
             ),
             title: Text(contact.name),
-            subtitle: Text('${contact.email}\n${contact.phone}'),
+            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
             isThreeLine: true,
             trailing: IconButton(
               icon: Icon(
@@ -224,6 +225,7 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
+  final TextEditingController kategoriController = TextEditingController();
 
   void _saveContact() {
     if (nameController.text.trim().isEmpty) return;
@@ -234,6 +236,7 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
         name: nameController.text,
         email: emailController.text,
         phone: phoneController.text,
+        kategori: kategoriController.text.isEmpty ? null : kategoriController.text,
       ),
     );
   }
@@ -243,6 +246,7 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
     nameController.dispose();
     emailController.dispose();
     phoneController.dispose();
+    kategoriController.dispose();
     super.dispose();
   }
 
@@ -283,6 +287,14 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
               ),
               keyboardType: TextInputType.phone,
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: kategoriController,
+              decoration: const InputDecoration(
+                labelText: 'Kategori (Keluarga/Teman/Kerja)',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -317,7 +329,7 @@ class FavoritPage extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.star, color: Colors.amber),
             title: Text(contact.name),
-            subtitle: Text('${contact.email}\n${contact.phone}'),
+            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
             isThreeLine: true,
           ),
         );
