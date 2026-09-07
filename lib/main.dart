@@ -186,7 +186,16 @@ class KontakPage extends StatelessWidget {
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
+            leading: CircleAvatar(
+              backgroundColor: Colors.blue,
+              child: Text(
+                contact.name[0].toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
             title: Text(contact.name),
             subtitle: Text('${contact.email}\n${contact.phone}'),
             isThreeLine: true,
