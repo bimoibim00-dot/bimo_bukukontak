@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -162,7 +163,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 }
 
-class KontakPage extends StatelessWidget {
+class KontakPage extends StatefulWidget {
   final List<Contact> contacts;
   final List<Contact> favoriteContacts;
   final void Function(Contact contact) onToggleFavorite;
@@ -175,41 +176,95 @@ class KontakPage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (contacts.isEmpty) {
-      return const Center(child: Text('Belum ada kontak.'));
-    }
-    return ListView.builder(
-      itemCount: contacts.length,
-      itemBuilder: (context, index) {
-        final contact = contacts[index];
-        final isFavorite = favoriteContacts.contains(contact);
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.blue,
-              child: Text(
-                contact.name[0].toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            title: Text(contact.name),
-            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
-            isThreeLine: true,
-            trailing: IconButton(
-              icon: Icon(
-                isFavorite ? Icons.star : Icons.star_border,
-                color: isFavorite ? Colors.amber : null,
-              ),
-              onPressed: () => onToggleFavorite(contact),
+  State<KontakPage> createState() => _KontakPageState();
+}
+
+class _KontakPageState extends State<KontakPage> {
+  // ================= TAB 1: KONTAK (dengan pencarian Stream - Tugas 6) =================
+  late StreamController<String> _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = StreamController<String>.broadcast();
+  }
+
+  @override
+  void dispose() {
+    _searchController.close();
+    super.dispose();
+  }
+
+  Widget _buildKontakTile(Contact contact) {
+    final isFavorite = widget.favoriteContacts.contains(contact);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.blue,
+          child: Text(
+            contact.name[0].toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        );
-      },
+        ),
+        title: Text(contact.name),
+        subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
+        isThreeLine: true,
+        trailing: IconButton(
+          icon: Icon(
+            isFavorite ? Icons.star : Icons.star_border,
+            color: isFavorite ? Colors.amber : null,
+          ),
+          onPressed: () => widget.onToggleFavorite(contact),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            decoration: const InputDecoration(
+              labelText: 'Cari nama atau kategori...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (teks) {
+              _searchController.add(teks); // kirim teks pencarian ke stream
+            },
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<String>(
+            stream: _searchController.stream,
+            builder: (context, snapshot) {
+              final keyword = (snapshot.data ?? '').toLowerCase();
+
+              final hasilFilter = widget.contacts.where((k) {
+                final namaMatch = k.name.toLowerCase().contains(keyword);
+                final kategoriMatch = (k.kategori ?? '').toLowerCase().contains(keyword);
+                return namaMatch || kategoriMatch;
+              }).toList();
+
+              if (hasilFilter.isEmpty) {
+                return const Center(child: Text('Kontak tidak ditemukan'));
+              }
+
+              return ListView.builder(
+                itemCount: hasilFilter.length,
+                itemBuilder: (context, index) => _buildKontakTile(hasilFilter[index]),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
