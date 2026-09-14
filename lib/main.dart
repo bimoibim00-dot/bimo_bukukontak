@@ -43,15 +43,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final List<Contact> contacts = [];
   final List<Contact> favoriteContacts = [];
 
+  final StreamController<String> _searchController = StreamController<String>.broadcast();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _searchController.add('');
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.close();
     super.dispose();
   }
 
@@ -66,6 +70,57 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       });
       _tabController.animateTo(0);
     }
+  }
+
+  Future<void> _editContact(Contact oldContact) async {
+    final updatedContact = await Navigator.push<Contact>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditKontakPage(contact: oldContact),
+      ),
+    );
+
+    if (updatedContact != null) {
+      setState(() {
+        final index = contacts.indexOf(oldContact);
+        if (index != -1) {
+          contacts[index] = updatedContact;
+        }
+
+        final favIndex = favoriteContacts.indexOf(oldContact);
+        if (favIndex != -1) {
+          favoriteContacts[favIndex] = updatedContact;
+        }
+      });
+    }
+  }
+
+  void _deleteContact(Contact contact) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Hapus Kontak'),
+          content: Text('Apakah kamu yakin ingin menghapus ${contact.name}?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  contacts.remove(contact);
+                  favoriteContacts.remove(contact);
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _toggleFavorite(Contact contact) {
@@ -146,12 +201,50 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       body: TabBarView(
         controller: _tabController,
         children: [
-          KontakPage(
-            contacts: contacts,
-            favoriteContacts: favoriteContacts,
-            onToggleFavorite: _toggleFavorite,
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Cari nama atau kategori...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (teks) {
+                    _searchController.add(teks);
+                  },
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<String>(
+                  stream: _searchController.stream,
+                  builder: (context, snapshot) {
+                    final keyword = (snapshot.data ?? '').toLowerCase();
+                    final hasilFilter = contacts.where((c) {
+                      final namaMatch = c.name.toLowerCase().contains(keyword);
+                      final kategoriMatch = (c.kategori ?? '').toLowerCase().contains(keyword);
+                      return namaMatch || kategoriMatch;
+                    }).toList();
+
+                    return KontakPage(
+                      contacts: hasilFilter,
+                      favoriteContacts: favoriteContacts,
+                      onToggleFavorite: _toggleFavorite,
+                      onEdit: _editContact,
+                      onDelete: _deleteContact,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          FavoritPage(favoriteContacts: favoriteContacts),
+
+          FavoritPage(
+            favoriteContacts: favoriteContacts,
+            onEdit: _editContact,
+            onDelete: _deleteContact,
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -163,126 +256,86 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 }
 
-class KontakPage extends StatefulWidget {
+class KontakPage extends StatelessWidget {
   final List<Contact> contacts;
   final List<Contact> favoriteContacts;
   final void Function(Contact contact) onToggleFavorite;
+  final void Function(Contact contact) onEdit;
+  final void Function(Contact contact) onDelete;
 
   const KontakPage({
     super.key,
     required this.contacts,
     required this.favoriteContacts,
     required this.onToggleFavorite,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
-  State<KontakPage> createState() => _KontakPageState();
-}
-
-class _KontakPageState extends State<KontakPage> {
-  // ================= TAB 1: KONTAK (dengan pencarian Stream - Tugas 6) =================
-  late StreamController<String> _searchController;
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController = StreamController<String>.broadcast();
-  }
-
-  @override
-  void dispose() {
-    _searchController.close();
-    super.dispose();
-  }
-
-  Widget _buildKontakTile(Contact contact) {
-    final isFavorite = widget.favoriteContacts.contains(contact);
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue,
-          child: Text(
-            contact.name[0].toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        title: Text(contact.name),
-        subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
-        isThreeLine: true,
-        trailing: IconButton(
-          icon: Icon(
-            isFavorite ? Icons.star : Icons.star_border,
-            color: isFavorite ? Colors.amber : null,
-          ),
-          onPressed: () => widget.onToggleFavorite(contact),
-        ),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Cari nama atau kategori...',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
+    if (contacts.isEmpty) {
+      return const Center(child: Text('Kontak tidak ditemukan.'));
+    }
+    return ListView.builder(
+      itemCount: contacts.length,
+      itemBuilder: (context, index) {
+        final contact = contacts[index];
+        final isFavorite = favoriteContacts.contains(contact);
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.blue,
+              child: Text(
+                contact.name[0].toUpperCase(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
             ),
-            onChanged: (teks) {
-              _searchController.add(teks); // kirim teks pencarian ke stream
-            },
+            title: Text(contact.name),
+            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
+            isThreeLine: true,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    isFavorite ? Icons.star : Icons.star_border,
+                    color: isFavorite ? Colors.amber : null,
+                  ),
+                  onPressed: () => onToggleFavorite(contact),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.blue),
+                  onPressed: () => onEdit(contact),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => onDelete(contact),
+                ),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: StreamBuilder<String>(
-            stream: _searchController.stream,
-            builder: (context, snapshot) {
-              final keyword = (snapshot.data ?? '').toLowerCase();
-
-              final hasilFilter = widget.contacts.where((k) {
-                final namaMatch = k.name.toLowerCase().contains(keyword);
-                final kategoriMatch = (k.kategori ?? '').toLowerCase().contains(keyword);
-                return namaMatch || kategoriMatch;
-              }).toList();
-
-              if (hasilFilter.isEmpty) {
-                return const Center(child: Text('Kontak tidak ditemukan'));
-              }
-
-              return ListView.builder(
-                itemCount: hasilFilter.length,
-                itemBuilder: (context, index) => _buildKontakTile(hasilFilter[index]),
-              );
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
 
-  class TambahKontakPage extends StatefulWidget {
-    const TambahKontakPage({super.key});
+class TambahKontakPage extends StatefulWidget {
+  const TambahKontakPage({super.key});
 
   @override
   State<TambahKontakPage> createState() => _TambahKontakPageState();
 }
 
-  class _TambahKontakPageState extends State<TambahKontakPage> {
-    final _formKey = GlobalKey<FormState>();
+class _TambahKontakPageState extends State<TambahKontakPage> {
+  final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _noHpController = TextEditingController();
-  final TextEditingController _kategoriController = TextEditingController(); // Tugas 4
+  final TextEditingController _kategoriController = TextEditingController();
 
   @override
   void dispose() {
@@ -294,16 +347,16 @@ class _KontakPageState extends State<KontakPage> {
   }
 
   void _simpanKontak() {
-  if (_formKey.currentState!.validate()) {
-    final newContact = Contact(
-      name: _namaController.text,
-      email: _emailController.text,
-      phone: _noHpController.text,
-      kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
-    );
-    Navigator.pop(context, newContact);
+    if (_formKey.currentState!.validate()) {
+      final newContact = Contact(
+        name: _namaController.text,
+        email: _emailController.text,
+        phone: _noHpController.text,
+        kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
+      );
+      Navigator.pop(context, newContact);
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -395,10 +448,154 @@ class _KontakPageState extends State<KontakPage> {
   }
 }
 
+class EditKontakPage extends StatefulWidget {
+  final Contact contact;
+
+  const EditKontakPage({super.key, required this.contact});
+
+  @override
+  State<EditKontakPage> createState() => _EditKontakPageState();
+}
+
+class _EditKontakPageState extends State<EditKontakPage> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _namaController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _noHpController;
+  late final TextEditingController _kategoriController;
+
+  @override
+  void initState() {
+    super.initState();
+    _namaController = TextEditingController(text: widget.contact.name);
+    _emailController = TextEditingController(text: widget.contact.email);
+    _noHpController = TextEditingController(text: widget.contact.phone);
+    _kategoriController = TextEditingController(text: widget.contact.kategori ?? '');
+  }
+
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _emailController.dispose();
+    _noHpController.dispose();
+    _kategoriController.dispose();
+    super.dispose();
+  }
+
+  void _simpanPerubahan() {
+    if (_formKey.currentState!.validate()) {
+      final updatedContact = Contact(
+        name: _namaController.text,
+        email: _emailController.text,
+        phone: _noHpController.text,
+        kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
+      );
+      Navigator.pop(context, updatedContact);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Kontak'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _namaController,
+                decoration: const InputDecoration(
+                  labelText: 'Nama Lengkap',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Nama tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Email tidak boleh kosong';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Email harus mengandung karakter @';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _noHpController,
+                decoration: const InputDecoration(
+                  labelText: 'No. Handphone',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'No. Handphone tidak boleh kosong';
+                  }
+                  if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
+                    return 'No. Handphone hanya boleh berisi angka';
+                  }
+                  if (value.length < 10) {
+                    return 'No. Handphone minimal 10 digit';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _kategoriController,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori (Keluarga/Teman/Kerja)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _simpanPerubahan,
+                  child: const Text('Simpan Perubahan'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FavoritPage extends StatelessWidget {
   final List<Contact> favoriteContacts;
+  final void Function(Contact contact) onEdit;
+  final void Function(Contact contact) onDelete;
 
-  const FavoritPage({super.key, required this.favoriteContacts});
+  const FavoritPage({
+    super.key,
+    required this.favoriteContacts,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +613,19 @@ class FavoritPage extends StatelessWidget {
             title: Text(contact.name),
             subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
             isThreeLine: true,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.blue),
+                  onPressed: () => onEdit(contact),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => onDelete(contact),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -436,27 +646,27 @@ class TentangPage extends StatelessWidget {
       ),
       body: Center(
         child: Padding(
-        padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const CircleAvatar(
-              radius: 50,
-              backgroundImage: AssetImage('assets/pap.jpeg'),   
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Bimo Nugroho',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('XII RPL B'),
-            const Text('SMK Negeri 5 Surakarta'),
-          ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage('assets/pap.jpeg'),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Bimo Nugroho',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('XII RPL B'),
+              const Text('SMK Negeri 5 Surakarta'),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
