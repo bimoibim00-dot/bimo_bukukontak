@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -12,22 +17,26 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Buku Kontak',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const HomePage(),
     );
   }
 }
 
 class Contact {
+  final String id;
   final String name;
   final String email;
   final String phone;
   final String? kategori;
 
-  Contact({required this.name, required this.email, required this.phone, this.kategori});
+  Contact({
+    this.id = '',
+    required this.name,
+    required this.email,
+    required this.phone,
+    this.kategori,
+  });
 }
 
 class HomePage extends StatefulWidget {
@@ -37,13 +46,15 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   final List<Contact> contacts = [];
-  final List<Contact> favoriteContacts = [];
+  final Set<String> favoriteContactIds = {};
 
-  final StreamController<String> _searchController = StreamController<String>.broadcast();
+  final StreamController<String> _searchController =
+      StreamController<String>.broadcast();
 
   @override
   void initState() {
@@ -73,62 +84,67 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _editContact(Contact oldContact) async {
-    final updatedContact = await Navigator.push<Contact>(
+    final updated = await Navigator.push<Contact>(
       context,
       MaterialPageRoute(
         builder: (context) => EditKontakPage(contact: oldContact),
       ),
     );
-
-    if (updatedContact != null) {
-      setState(() {
-        final index = contacts.indexOf(oldContact);
-        if (index != -1) {
-          contacts[index] = updatedContact;
-        }
-
-        final favIndex = favoriteContacts.indexOf(oldContact);
-        if (favIndex != -1) {
-          favoriteContacts[favIndex] = updatedContact;
-        }
-      });
+    if (updated == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('kontak')
+          .doc(oldContact.id)
+          .update({
+            'nama': updated.name,
+            'email': updated.email,
+            'noHandphone': updated.phone,
+            'kategori': updated.kategori,
+          });
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Data berhasil diperbarui')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal memperbarui: $e')));
     }
   }
 
   void _deleteContact(Contact contact) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Hapus Kontak'),
-          content: Text('Apakah kamu yakin ingin menghapus ${contact.name}?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  contacts.remove(contact);
-                  favoriteContacts.remove(contact);
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Hapus', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Kontak'),
+        content: Text('Apakah kamu yakin ingin menghapus ${contact.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await FirebaseFirestore.instance
+                  .collection('kontak')
+                  .doc(contact.id)
+                  .delete();
+              if (!mounted) return;
+              setState(() => favoriteContactIds.remove(contact.id));
+            },
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 
   void _toggleFavorite(Contact contact) {
     setState(() {
-      if (favoriteContacts.contains(contact)) {
-        favoriteContacts.remove(contact);
-      } else {
-        favoriteContacts.add(contact);
+      if (!favoriteContactIds.add(contact.id)) {
+        favoriteContactIds.remove(contact.id);
       }
     });
   }
@@ -198,54 +214,82 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          Column(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance.collection('kontak').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
+          }
+          final contacts = snapshot.data!.docs.map((doc) {
+            final data = doc.data();
+            return Contact(
+              id: doc.id,
+              name: data['nama'] ?? '',
+              email: data['email'] ?? '',
+              phone: data['noHandphone'] ?? '',
+              kategori: data['kategori'],
+            );
+          }).toList();
+          return TabBarView(
+            controller: _tabController,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Cari nama atau kategori...',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Cari nama atau kategori...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (teks) {
+                        _searchController.add(teks);
+                      },
+                    ),
                   ),
-                  onChanged: (teks) {
-                    _searchController.add(teks);
-                  },
-                ),
+                  Expanded(
+                    child: StreamBuilder<String>(
+                      stream: _searchController.stream,
+                      initialData: '',
+                      builder: (context, searchSnap) {
+                        final keyword = (searchSnap.data ?? '').toLowerCase();
+                        final hasil = contacts
+                            .where(
+                              (contact) =>
+                                  contact.name.toLowerCase().contains(
+                                    keyword,
+                                  ) ||
+                                  (contact.kategori ?? '')
+                                      .toLowerCase()
+                                      .contains(keyword),
+                            )
+                            .toList();
+                        return KontakPage(
+                          contacts: hasil,
+                          favoriteContactIds: favoriteContactIds,
+                          onToggleFavorite: _toggleFavorite,
+                          onEdit: _editContact,
+                          onDelete: _deleteContact,
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-              Expanded(
-                child: StreamBuilder<String>(
-                  stream: _searchController.stream,
-                  builder: (context, snapshot) {
-                    final keyword = (snapshot.data ?? '').toLowerCase();
-                    final hasilFilter = contacts.where((c) {
-                      final namaMatch = c.name.toLowerCase().contains(keyword);
-                      final kategoriMatch = (c.kategori ?? '').toLowerCase().contains(keyword);
-                      return namaMatch || kategoriMatch;
-                    }).toList();
-
-                    return KontakPage(
-                      contacts: hasilFilter,
-                      favoriteContacts: favoriteContacts,
-                      onToggleFavorite: _toggleFavorite,
-                      onEdit: _editContact,
-                      onDelete: _deleteContact,
-                    );
-                  },
-                ),
+              FavoritPage(
+                favoriteContacts: contacts
+                    .where((contact) => favoriteContactIds.contains(contact.id))
+                    .toList(),
+                onEdit: _editContact,
+                onDelete: _deleteContact,
               ),
             ],
-          ),
-
-          FavoritPage(
-            favoriteContacts: favoriteContacts,
-            onEdit: _editContact,
-            onDelete: _deleteContact,
-          ),
-        ],
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addContact,
@@ -258,7 +302,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
 class KontakPage extends StatelessWidget {
   final List<Contact> contacts;
-  final List<Contact> favoriteContacts;
+  final Set<String> favoriteContactIds;
   final void Function(Contact contact) onToggleFavorite;
   final void Function(Contact contact) onEdit;
   final void Function(Contact contact) onDelete;
@@ -266,7 +310,7 @@ class KontakPage extends StatelessWidget {
   const KontakPage({
     super.key,
     required this.contacts,
-    required this.favoriteContacts,
+    required this.favoriteContactIds,
     required this.onToggleFavorite,
     required this.onEdit,
     required this.onDelete,
@@ -281,7 +325,7 @@ class KontakPage extends StatelessWidget {
       itemCount: contacts.length,
       itemBuilder: (context, index) {
         final contact = contacts[index];
-        final isFavorite = favoriteContacts.contains(contact);
+        final isFavorite = favoriteContactIds.contains(contact.id);
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: ListTile(
@@ -289,11 +333,16 @@ class KontakPage extends StatelessWidget {
               backgroundColor: Colors.blue,
               child: Text(
                 contact.name[0].toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             title: Text(contact.name),
-            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
+            subtitle: Text(
+              '${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}',
+            ),
             isThreeLine: true,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -346,15 +395,30 @@ class _TambahKontakPageState extends State<TambahKontakPage> {
     super.dispose();
   }
 
-  void _simpanKontak() {
-    if (_formKey.currentState!.validate()) {
-      final newContact = Contact(
-        name: _namaController.text,
-        email: _emailController.text,
-        phone: _noHpController.text,
-        kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
+  Future<void> _simpanKontak() async {
+    if (!_formKey.currentState!.validate()) return;
+    try {
+      await FirebaseFirestore.instance.collection('kontak').add({
+        'nama': _namaController.text,
+        'email': _emailController.text,
+        'noHandphone': _noHpController.text,
+        'kategori': _kategoriController.text.isEmpty
+            ? null
+            : _kategoriController.text,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data berhasil disimpan'),
+          duration: Duration(seconds: 2),
+        ),
       );
-      Navigator.pop(context, newContact);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan kontak: $e')));
     }
   }
 
@@ -471,7 +535,9 @@ class _EditKontakPageState extends State<EditKontakPage> {
     _namaController = TextEditingController(text: widget.contact.name);
     _emailController = TextEditingController(text: widget.contact.email);
     _noHpController = TextEditingController(text: widget.contact.phone);
-    _kategoriController = TextEditingController(text: widget.contact.kategori ?? '');
+    _kategoriController = TextEditingController(
+      text: widget.contact.kategori ?? '',
+    );
   }
 
   @override
@@ -489,7 +555,9 @@ class _EditKontakPageState extends State<EditKontakPage> {
         name: _namaController.text,
         email: _emailController.text,
         phone: _noHpController.text,
-        kategori: _kategoriController.text.isEmpty ? null : _kategoriController.text,
+        kategori: _kategoriController.text.isEmpty
+            ? null
+            : _kategoriController.text,
       );
       Navigator.pop(context, updatedContact);
     }
@@ -611,7 +679,9 @@ class FavoritPage extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.star, color: Colors.amber),
             title: Text(contact.name),
-            subtitle: Text('${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}'),
+            subtitle: Text(
+              '${contact.email}\n${contact.phone}\n${contact.kategori ?? 'Tanpa kategori'}',
+            ),
             isThreeLine: true,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "249005249892",
+    "project_id": "buku-kontak-c2edc",
+    "storage_bucket": "buku-kontak-c2edc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249005249892:android:1a2b7ac53ba95ee7015671",
+        "android_client_info": {
+          "package_name": "com.example.bukukontak"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_VuHDxZn8VOujzrUO5km7CQ_AH5NMpH4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
